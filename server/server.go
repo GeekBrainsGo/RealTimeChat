@@ -1,39 +1,27 @@
 package server
 
 import (
-	"github.com/go-chi/chi"
-	"github.com/gorilla/websocket"
 	"net/http"
 	"sync"
+
+	"github.com/go-chi/chi"
+	"github.com/gorilla/websocket"
 )
-
-type Subscriber func(msg string) error
-
-type Server struct {
-	router   *chi.Mux
-	upgrader *websocket.Upgrader
-
-	submutex    *sync.Mutex
-	subscribers map[string]Subscriber
-}
 
 func New() *Server {
 	router := chi.NewRouter()
-
 	upgrader := &websocket.Upgrader{
 		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
+		WriteBufferSize: 2014,
 	}
-
 	serv := &Server{
-		router:   router,
-		upgrader: upgrader,
-
+		router:      router,
+		upgrader:    upgrader,
 		submutex:    &sync.Mutex{},
 		subscribers: map[string]Subscriber{},
 	}
 
-	serv.ApplyHandlers()
+	serv.bindRoutes()
 
 	return serv
 }
