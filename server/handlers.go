@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -18,28 +17,18 @@ func (serv *Server) WShandler(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 	}
 
-	go func() {
-		for {
-			<-time.After(5 * time.Second)
-			msg := Message{
-				Type: MTPing,
-			}
-			if err := ws.WriteJSON(msg); err != nil {
-				log.Printf("ws send ping err: %v", err)
-				break
-			}
-		}
-	}()
-	client := models.NewUser(uuid.New().String())
+	go SendPing(ws)
+
+	client := models.NewUser(uuid.New().String(), ws)
 	fmt.Println("client connected: ", client.GetID())
-	client.SetWS(ws)
+
 	ch, err := serv.publisher.GetChannel("one")
 	if err != nil {
 		fmt.Println(err)
 	}
 	ch.Subscribe(client)
 	for {
-		msg := Message{}
+		msg := models.Message{}
 		if err := ws.ReadJSON(&msg); err != nil {
 			if !websocket.IsCloseError(err, 1001) {
 				log.Println("ws msg read err: %v", err)
@@ -47,13 +36,13 @@ func (serv *Server) WShandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		if msg.Type == MTPong {
+		if msg.Type == models.MTPong {
 			continue
 		}
 
-		if msg.Type == MTMessage {
+		if msg.Type == models.MTMessage {
 			serv.submutex.Lock()
-			serv.publisher.Send(msg.Data, "one")
+			serv.publisher.Send(fmt.Sprintf("%s: %s", client.GetID(), msg.Data), "one")
 			serv.submutex.Unlock()
 		}
 	}

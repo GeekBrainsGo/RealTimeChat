@@ -1,8 +1,10 @@
 package server
 
 import (
+	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/websocket"
@@ -40,4 +42,17 @@ func New() *Server {
 
 func (serv *Server) Start() error {
 	return http.ListenAndServe(":8085", serv.router)
+}
+
+func SendPing(ws *websocket.Conn) {
+	for {
+		<-time.After(5 * time.Second)
+		msg := models.Message{
+			Type: models.MTPing,
+		}
+		if err := ws.WriteJSON(msg); err != nil {
+			log.Printf("ws send ping err: %v", err)
+			break
+		}
+	}
 }

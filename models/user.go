@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/gorilla/websocket"
@@ -13,16 +12,17 @@ type User struct {
 	WS       *websocket.Conn
 }
 
-func NewUser(username string) *User {
+func NewUser(username string, ws *websocket.Conn) *User {
 	return &User{
 		Username: username,
+		WS:       ws,
 	}
 }
 
 func (u *User) OnReceive(msg string) {
 	message := Message{
 		Type: MTMessage,
-		Data: fmt.Sprintf("%s: %s", u.GetID(), msg),
+		Data: msg,
 	}
 	if err := u.WS.WriteJSON(message); err != nil {
 		log.Printf("ws send message err: %v", err)
