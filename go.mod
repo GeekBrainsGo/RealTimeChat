@@ -1,4 +1,4 @@
-module github.com/phadeyev/wschat
+module github.com/phadeyev/RealTimeChat
 
 go 1.14
 

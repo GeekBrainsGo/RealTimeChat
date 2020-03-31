@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/phadeyev/RealTimeChat/models"
 )
 
 func (serv *Server) WShandler(w http.ResponseWriter, r *http.Request) {
@@ -29,21 +30,14 @@ func (serv *Server) WShandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	id := uuid.New().String()
-	fmt.Println("client connected: ", id)
-	serv.submutex.Lock()
-	serv.subscribers[id] = func(msg string) error {
-		m := Message{
-			Type: MTMessage,
-			Data: msg,
-		}
-		if err := ws.WriteJSON(m); err != nil {
-			log.Printf("ws msg send err: %v", err)
-		}
-		return nil
+	client := models.NewUser(uuid.New().String())
+	fmt.Println("client connected: ", client.GetID())
+	client.SetWS(ws)
+	ch, err := serv.publisher.GetChannel("one")
+	if err != nil {
+		fmt.Println(err)
 	}
-	serv.submutex.Unlock()
-
+	ch.Subscribe(client)
 	for {
 		msg := Message{}
 		if err := ws.ReadJSON(&msg); err != nil {
@@ -58,22 +52,21 @@ func (serv *Server) WShandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if msg.Type == MTMessage {
-			fmt.Println(msg.Data)
 			serv.submutex.Lock()
-			for _, sub := range serv.subscribers {
-				if err := sub(msg.Data); err != nil {
-					log.Println("ws msg subs err: %v", err)
-				}
-			}
+			serv.publisher.Send(msg.Data, "one")
 			serv.submutex.Unlock()
 		}
 	}
 	defer func() {
 		ws.Close()
 		serv.submutex.Lock()
-		delete(serv.subscribers, id)
+		ch, err := serv.publisher.GetChannel("one")
+		if err != nil {
+			fmt.Println(err)
+		}
+		ch.UnSubscribe(client)
 		serv.submutex.Unlock()
-		fmt.Println("client disconnected: ", id)
+		fmt.Println("client disconnected: ", client.GetID())
 	}()
 
 }
