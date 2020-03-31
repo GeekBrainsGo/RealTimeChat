@@ -2,79 +2,60 @@ package server
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
-	"time"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"github.com/phadeyev/RealTimeChat/models"
 )
 
-func (serv *Server) ApplyHandlers() {
-	serv.router.Handle("/*", http.FileServer(http.Dir("./web")))
-	serv.router.Get("/socket", serv.socketHandler)
-}
+func (serv *Server) WShandler(w http.ResponseWriter, r *http.Request) {
 
-func (serv *Server) socketHandler(w http.ResponseWriter, r *http.Request) {
 	ws, err := serv.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatalf("websocket err: %v", err)
+		log.Println(err)
 	}
 
-	go func() {
-		for {
-			<-time.After(5 * time.Second)
-			msg := Message{
-				Type: MTPing,
-			}
-			if err := ws.WriteJSON(msg); err != nil {
-				log.Printf("ws send ping err: %v", err)
-			}
-		}
-	}()
+	go SendPing(ws)
 
-	id := uuid.New().String()
-	serv.submutex.Lock()
-	serv.subscribers[id] = func(msg string) error {
-		m := Message{
-			Type: MTMessage,
-			Data: msg,
-		}
-		if err := ws.WriteJSON(m); err != nil {
-			log.Printf("ws msg fetch err: %v", err)
-		}
-		return nil
+	client := models.NewUser(uuid.New().String(), ws)
+	fmt.Println("client connected: ", client.GetID())
+
+	ch, err := serv.publisher.GetChannel("one")
+	if err != nil {
+		fmt.Println(err)
 	}
-	serv.submutex.Unlock()
-
+	ch.Subscribe(client)
 	for {
-		msg := Message{}
+		msg := models.Message{}
 		if err := ws.ReadJSON(&msg); err != nil {
 			if !websocket.IsCloseError(err, 1001) {
-				log.Fatalf("ws msg read err: %v", err)
+				log.Println("ws msg read err: %v", err)
 			}
 			break
 		}
 
-		if msg.Type == MTPong {
+		if msg.Type == models.MTPong {
 			continue
 		}
 
-		if msg.Type == MTMessage {
-			fmt.Println(msg.Data)
+		if msg.Type == models.MTMessage {
 			serv.submutex.Lock()
-			for _, sub := range serv.subscribers {
-				if err := sub(msg.Data); err != nil {
-					log.Fatalf("ws msg subs err: %v", err)
-				}
-			}
+			serv.publisher.Send(fmt.Sprintf("%s: %s", client.GetID(), msg.Data), "one")
 			serv.submutex.Unlock()
 		}
 	}
-
-	fmt.Println("CLSOED")
 	defer func() {
+		ws.Close()
 		serv.submutex.Lock()
-		delete(serv.subscribers, id)
+		ch, err := serv.publisher.GetChannel("one")
+		if err != nil {
+			fmt.Println(err)
+		}
+		ch.UnSubscribe(client)
 		serv.submutex.Unlock()
+		fmt.Println("client disconnected: ", client.GetID())
 	}()
+
 }

@@ -1,4 +1,4 @@
-module realtimechat
+module github.com/phadeyev/RealTimeChat
 
 go 1.14
 
